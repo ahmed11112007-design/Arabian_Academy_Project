@@ -10,7 +10,6 @@ app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 app.use(express.static('public'));
 
-// صفحة تسجيل الدخول
 app.get('/login', (req, res) => {
     res.send(`
      <link rel="stylesheet" href="/style.css">
@@ -24,14 +23,12 @@ app.get('/login', (req, res) => {
   `);
 });
 
-// معالجة تسجيل الدخول
 app.post('/login', (req, res) => {
     const { username, password } = req.body;
     const query = `SELECT * FROM users WHERE username = '${username}' AND password = '${password}'`;
     const user = db.prepare(query).get();
 
     if (user) {
-        // بنحط كوكيز بسيطة فيها اسم المستخدم، عشان "نتذكر" إنه داخل
         res.cookie('loggedInUser', user.username, { sameSite: 'none', secure: true });
         res.send(`Welcome, ${user.username}! <a href="/account">Go to Account Settings</a>`);
     } else {
@@ -39,7 +36,6 @@ app.post('/login', (req, res) => {
     }
 });
 
-// صفحة إعدادات الحساب - عرض البريد الحالي وفورم تغييره
 app.get('/account', (req, res) => {
     const username = req.cookies.loggedInUser;
     if (!username) {
@@ -60,7 +56,6 @@ app.get('/account', (req, res) => {
   `);
 });
 
-// تغيير البريد الإلكتروني - هنا الثغرة!
 app.post('/change-email', (req, res) => {
     const username = req.cookies.loggedInUser;
     if (!username) {
@@ -68,13 +63,11 @@ app.post('/change-email', (req, res) => {
     }
 
     const { newEmail } = req.body;
-    // خطر: مفيش أي تحقق إن الطلب ده جاي فعليًا من صفحة موقعنا
     db.prepare('UPDATE users SET email = ? WHERE username = ?').run(newEmail, username);
 
     res.send(`Email changed to: ${newEmail}`);
 });
 
-// صفحة التعليقات
 app.get('/comments', (req, res) => {
     const comments = db.prepare('SELECT * FROM comments').all();
     const commentsHtml = comments.map(c => `<p>${c.content}</p>`).join('');
