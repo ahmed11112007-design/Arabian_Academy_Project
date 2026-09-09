@@ -8,10 +8,12 @@ const PORT = 3000;
 
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
+app.use(express.static('public'));
 
 // صفحة تسجيل الدخول
 app.get('/login', (req, res) => {
     res.send(`
+    <link rel="stylesheet" href="/style.css">
     <h2>Login</h2>
     <form method="POST" action="/login">
       <input type="text" name="username" placeholder="Username"><br>
@@ -46,6 +48,7 @@ app.get('/account', (req, res) => {
     const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
 
     res.send(`
+    <link rel="stylesheet" href="/style.css">
     <h2>Account Settings</h2>
     <p>Current email: ${user.email}</p>
     <form method="POST" action="/change-email">
@@ -75,6 +78,7 @@ app.get('/comments', (req, res) => {
     const commentsHtml = comments.map(c => `<p>${c.content}</p>`).join('');
 
     res.send(`
+    <link rel="stylesheet" href="/style.css">
     <h2>Comments</h2>
     <form method="POST" action="/comments">
       <textarea name="content" placeholder="Write a comment..."></textarea><br>
@@ -92,7 +96,15 @@ app.post('/comments', (req, res) => {
 });
 
 app.get('/', (req, res) => {
-    res.send('Hello from the Vulnerable App! Try /login, /comments, or /account.');
+    res.send(`
+    <link rel="stylesheet" href="/style.css">
+    <h2>Vulnerable App - Node.js</h2>
+    <div class="vuln-grid">
+      <a href="/login" class="vuln-card">SQL Injection</a>
+      <a href="/comments" class="vuln-card">XSS</a>
+      <a href="/account" class="vuln-card">CSRF</a>
+    </div>
+  `);
 });
 
 app.listen(PORT, () => {
