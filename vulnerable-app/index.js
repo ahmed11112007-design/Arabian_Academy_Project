@@ -7,7 +7,7 @@ const PORT = 3000;
 
 app.use(express.urlencoded({ extended: true }));
 
-// صفحة تسجيل الدخول (نموذج HTML بسيط)
+// صفحة تسجيل الدخول
 app.get('/login', (req, res) => {
     res.send(`
     <h2>Login</h2>
@@ -19,7 +19,54 @@ app.get('/login', (req, res) => {
   `);
 });
 
-// معالجة تسجيل الدخول - هنا الثغرة!
+// معالجة تسجيل الدخول - ثغرة SQL Injection
+app.post('/login', (req, res) => {
+    const { username, password } = req.body;
+    const query = `SELECT * FROM users WHERE username = '${username}' AND password = '${password}'`;
+    console.log('Running query:', query);
+    const user = db.prepare(query).get();
+
+    if (user) {
+        res.send(`Welcome, ${user.username}! Login successful.`);
+    } else {
+        res.send('Invalid username or password.');
+    }
+});
+
+// صفحة التعليقات - عرض وإضافة
+app.get('/comments', (req, res) => {
+    const comments = db.prepare('SELECT * FROM comments').all();
+
+    // خطر: بنحط محتوى التعليق مباشرة في HTML من غير أي فحص
+    const commentsHtml = comments.map(c => `<p>${c.content}</p>`).join('');
+
+    res.send(`
+    <h2>Comments</h2>
+    <form method="POST" action="/comments">
+      <textarea name="content" placeholder="Write a comment..."></textarea><br>
+      <button type="submit">Post Comment</button>
+    </form>
+    <hr>
+    ${commentsHtml}
+  `);
+});
+
+// إضافة تعليق جديد
+app.post('/comments', (req, res) => {
+    const { content } = req.body;
+    db.prepare('INSERT INTO comments (content) VALUES (?)').run(content);
+    res.redirect('/comments');
+});
+
+app.get('/', (req, res) => {
+    res.send('Hello from the Vulnerable App! Try /login or /comments.');
+});
+
+app.listen(PORT, () => {
+    console.log(`Vulnerable app running at http://localhost:${PORT}`);
+});
+
+
 app.post('/login', (req, res) => {
     const { username, password } = req.body;
 
