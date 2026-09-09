@@ -1,6 +1,7 @@
 from flask import Flask, request
 import requests
 from flask import render_template_string
+import subprocess
 
 app = Flask(__name__)
 
@@ -31,6 +32,22 @@ def welcome():
     name = request.args.get('name', 'Guest')
     template = f'<h2>Welcome, {name}!</h2>'
     return render_template_string(template)
+
+@app.route('/ping', methods=['GET', 'POST'])
+def ping():
+    if request.method == 'GET':
+        return '''
+            <h2>Server Health Check</h2>
+            <form method="POST">
+                <input type="text" name="host" placeholder="Enter a hostname or IP">
+                <button type="submit">Ping</button>
+            </form>
+        '''
+
+    host = request.form['host']
+    command = f'ping -n 1 {host}'
+    result = subprocess.run(command, shell=True, capture_output=True, text=True)
+    return f'<pre>{result.stdout}</pre>'
 
 if __name__ == '__main__':
     app.run(port=5000, debug=True)

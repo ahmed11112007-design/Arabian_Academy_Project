@@ -31,3 +31,19 @@ User input is inserted directly into the template string before Jinja2 processes
 `render_template_string(template)` processes the entire string as a Jinja2 template. Since user input was concatenated into that string before rendering, any Jinja2 syntax the user provides gets executed by the template engine, not just displayed.
 
 **Note:** In a real-world scenario, an attacker would first test multiple template syntaxes to fingerprint the templating engine in use, before crafting an engine-specific payload. Here, Jinja2 syntax was used directly since the application's stack is known to be Flask.
+---------------------------------------------------------------------
+
+## 3. OS Command Injection
+**Location:** `/ping` route (POST) in `app.py`
+
+**Vulnerable code:**
+User input is concatenated directly into a shell command string, and executed with `shell=True`, allowing special shell characters to inject additional commands.
+
+**How to exploit:**
+1. Go to http://localhost:5000/ping
+2. Enter: `google.com & dir`
+3. Click Ping
+4. Result: The output shows both the ping result AND a directory listing, proving that a second, unintended command was executed
+
+**Why it works:**
+`subprocess.run(command, shell=True)` passes the entire string to the system shell for interpretation. The shell treats `&` as a command separator, so it executes the ping command and then the injected `dir` command sequentially. Since user input was never validated or separated from the command structure, any shell metacharacter can be used to inject arbitrary commands.
