@@ -1,4 +1,5 @@
 const express = require('express');
+const cookieParser = require('cookie-parser');
 const Database = require('better-sqlite3');
 const db = new Database('database.db');
 
@@ -6,6 +7,7 @@ const app = express();
 const PORT = 3000;
 
 app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
 
 // صفحة تسجيل الدخول
 app.get('/login', (req, res) => {
@@ -19,25 +21,57 @@ app.get('/login', (req, res) => {
   `);
 });
 
-// معالجة تسجيل الدخول - ثغرة SQL Injection
+// معالجة تسجيل الدخول
 app.post('/login', (req, res) => {
     const { username, password } = req.body;
     const query = `SELECT * FROM users WHERE username = '${username}' AND password = '${password}'`;
-    console.log('Running query:', query);
     const user = db.prepare(query).get();
 
     if (user) {
-        res.send(`Welcome, ${user.username}! Login successful.`);
+        // بنحط كوكيز بسيطة فيها اسم المستخدم، عشان "نتذكر" إنه داخل
+        res.cookie('loggedInUser', user.username, { sameSite: 'none', secure: true });
+        res.send(`Welcome, ${user.username}! <a href="/account">Go to Account Settings</a>`);
     } else {
         res.send('Invalid username or password.');
     }
 });
 
-// صفحة التعليقات - عرض وإضافة
+// صفحة إعدادات الحساب - عرض البريد الحالي وفورم تغييره
+app.get('/account', (req, res) => {
+    const username = req.cookies.loggedInUser;
+    if (!username) {
+        return res.send('You must log in first. <a href="/login">Login</a>');
+    }
+
+    const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
+
+    res.send(`
+    <h2>Account Settings</h2>
+    <p>Current email: ${user.email}</p>
+    <form method="POST" action="/change-email">
+      <input type="email" name="newEmail" placeholder="New email"><br>
+      <button type="submit">Change Email</button>
+    </form>
+  `);
+});
+
+// تغيير البريد الإلكتروني - هنا الثغرة!
+app.post('/change-email', (req, res) => {
+    const username = req.cookies.loggedInUser;
+    if (!username) {
+        return res.send('You must log in first.');
+    }
+
+    const { newEmail } = req.body;
+    // خطر: مفيش أي تحقق إن الطلب ده جاي فعليًا من صفحة موقعنا
+    db.prepare('UPDATE users SET email = ? WHERE username = ?').run(newEmail, username);
+
+    res.send(`Email changed to: ${newEmail}`);
+});
+
+// صفحة التعليقات
 app.get('/comments', (req, res) => {
     const comments = db.prepare('SELECT * FROM comments').all();
-
-    // خطر: بنحط محتوى التعليق مباشرة في HTML من غير أي فحص
     const commentsHtml = comments.map(c => `<p>${c.content}</p>`).join('');
 
     res.send(`
@@ -51,7 +85,6 @@ app.get('/comments', (req, res) => {
   `);
 });
 
-// إضافة تعليق جديد
 app.post('/comments', (req, res) => {
     const { content } = req.body;
     db.prepare('INSERT INTO comments (content) VALUES (?)').run(content);
@@ -59,32 +92,7 @@ app.post('/comments', (req, res) => {
 });
 
 app.get('/', (req, res) => {
-    res.send('Hello from the Vulnerable App! Try /login or /comments.');
-});
-
-app.listen(PORT, () => {
-    console.log(`Vulnerable app running at http://localhost:${PORT}`);
-});
-
-
-app.post('/login', (req, res) => {
-    const { username, password } = req.body;
-
-    // خطر: بنلزّق كلام المستخدم مباشرة جوا جملة SQL
-    const query = `SELECT * FROM users WHERE username = '${username}' AND password = '${password}'`;
-    console.log('Running query:', query);
-
-    const user = db.prepare(query).get();
-
-    if (user) {
-        res.send(`Welcome, ${user.username}! Login successful.`);
-    } else {
-        res.send('Invalid username or password.');
-    }
-});
-
-app.get('/', (req, res) => {
-    res.send('Hello from the Vulnerable App! Go to /login to try logging in.');
+    res.send('Hello from the Vulnerable App! Try /login, /comments, or /account.');
 });
 
 app.listen(PORT, () => {
