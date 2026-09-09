@@ -79,3 +79,26 @@ a {
 .vuln-card:hover {
     border-color: #3498db;
 }
+
+.vuln-desc {
+  display: block;
+  font-weight: normal;
+  font-size: 13px;
+  color: #7f8c8d;
+  margin-top: 6px;
+}
+
+.page-hint {
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  padding: 10px 14px;
+  border-radius: 4px;
+  font-size: 14px;
+  margin-bottom: 16px;
+}
+
+.page-hint code {
+  background: #f1f1f1;
+  padding: 2px 6px;
+  border-radius: 3px;
+}

@@ -13,8 +13,9 @@ app.use(express.static('public'));
 // صفحة تسجيل الدخول
 app.get('/login', (req, res) => {
     res.send(`
-    <link rel="stylesheet" href="/style.css">
+     <link rel="stylesheet" href="/style.css">
     <h2>Login</h2>
+    <p class="page-hint">Try Username: <code>admin' --</code> with any password.</p>
     <form method="POST" action="/login">
       <input type="text" name="username" placeholder="Username"><br>
       <input type="password" name="password" placeholder="Password"><br>
@@ -50,6 +51,7 @@ app.get('/account', (req, res) => {
     res.send(`
     <link rel="stylesheet" href="/style.css">
     <h2>Account Settings</h2>
+    <p class="page-hint">After logging in, open <code>csrf_attack.html</code> in the same browser, then refresh this page.</p>
     <p>Current email: ${user.email}</p>
     <form method="POST" action="/change-email">
       <input type="email" name="newEmail" placeholder="New email"><br>
@@ -80,6 +82,7 @@ app.get('/comments', (req, res) => {
     res.send(`
     <link rel="stylesheet" href="/style.css">
     <h2>Comments</h2>
+    <p class="page-hint">Try posting: <code>&lt;script&gt;alert('XSS Attack!')&lt;/script&gt;</code></p>
     <form method="POST" action="/comments">
       <textarea name="content" placeholder="Write a comment..."></textarea><br>
       <button type="submit">Post Comment</button>
@@ -100,9 +103,18 @@ app.get('/', (req, res) => {
     <link rel="stylesheet" href="/style.css">
     <h2>Vulnerable App - Node.js</h2>
     <div class="vuln-grid">
-      <a href="/login" class="vuln-card">SQL Injection</a>
-      <a href="/comments" class="vuln-card">XSS</a>
-      <a href="/account" class="vuln-card">CSRF</a>
+      <a href="/login" class="vuln-card">
+        SQL Injection
+        <span class="vuln-desc">Bypass login without a password</span>
+      </a>
+      <a href="/comments" class="vuln-card">
+        XSS
+        <span class="vuln-desc">Inject a script that runs in the browser</span>
+      </a>
+      <a href="/account" class="vuln-card">
+        CSRF
+        <span class="vuln-desc">Change account settings without consent</span>
+      </a>
     </div>
   `);
 });
