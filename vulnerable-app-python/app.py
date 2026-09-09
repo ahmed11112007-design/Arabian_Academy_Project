@@ -1,5 +1,6 @@
 from flask import Flask, request
 import requests
+from flask import render_template_string
 
 app = Flask(__name__)
 
@@ -24,6 +25,12 @@ def fetch_url():
         return f'<h3>Content from {url}:</h3><pre>{response.text[:1000]}</pre>'
     except Exception as e:
         return f'Error fetching URL: {str(e)}'
+    
+@app.route('/welcome')
+def welcome():
+    name = request.args.get('name', 'Guest')
+    template = f'<h2>Welcome, {name}!</h2>'
+    return render_template_string(template)
 
 if __name__ == '__main__':
     app.run(port=5000, debug=True)
