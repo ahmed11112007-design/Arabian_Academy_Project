@@ -49,5 +49,11 @@ def ping():
     result = subprocess.run(command, shell=True, capture_output=True, text=True)
     return f'<pre>{result.stdout}</pre>'
 
+@app.route('/calculate')
+def calculate():
+    number = request.args.get('number', '10')
+    result = 100 / int(number)
+    return f'Result: {result}'
+
 if __name__ == '__main__':
     app.run(port=5000, debug=True)

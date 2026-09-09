@@ -47,3 +47,25 @@ User input is concatenated directly into a shell command string, and executed wi
 
 **Why it works:**
 `subprocess.run(command, shell=True)` passes the entire string to the system shell for interpretation. The shell treats `&` as a command separator, so it executes the ping command and then the injected `dir` command sequentially. Since user input was never validated or separated from the command structure, any shell metacharacter can be used to inject arbitrary commands.
+-------------------------------------------------
+
+## 4. Information Disclosure
+**Location:** `/calculate` route in `app.py`, and default Flask server headers
+
+**Vulnerable code (Example 1 - Debug error pages):**
+Flask is running with `debug=True`, and the `/calculate` route has no error handling around integer division.
+
+**How to exploit (Example 1):**
+1. Go to http://localhost:5000/calculate?number=0
+2. Result: A full Flask debug page appears, showing the exact error type (ZeroDivisionError), the full file path on the server, the exact line number, the source code snippet, and an interactive debugging console
+
+**Vulnerable code (Example 2 - HTTP header leakage):**
+Flask's default development server exposes detailed version information in the `Server` HTTP response header.
+
+**How to exploit (Example 2):**
+1. Open any page (e.g. http://localhost:5000/) with browser DevTools open on the Network tab
+2. Inspect the Response Headers of the request
+3. Result: The `Server` header reveals the exact Werkzeug and Python versions in use (e.g. "Werkzeug/3.1.8 Python/3.14.7")
+
+**Why it works:**
+Debug mode is intended for development only, but leaving it enabled exposes internal application details and even remote code execution capability via the interactive console. Similarly, default server headers are not stripped or customized, letting any visitor fingerprint the exact software stack and search for known vulnerabilities matching those specific versions.
