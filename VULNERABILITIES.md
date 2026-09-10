@@ -1,144 +1,273 @@
-# Vulnerabilities Documentation
+# Vulnerability Documentation
 
-This document lists all seven vulnerability categories implemented in the vulnerable version of this project, organized by technology stack.
+This document provides a detailed analysis of all seven vulnerability categories implemented in the vulnerable version of this project. Each section covers the vulnerability's location, the flawed code, exploitation steps, and a Q&A section addressing common questions.
 
-## Summary Table
+## Overview Table
 
-| # | Vulnerability | Stack | Location |
+| # | Vulnerability | Stack | Endpoint |
 |---|---|---|---|
-| 1 | SQL Injection | Node.js | `/login` (POST) |
-| 2 | XSS | Node.js | `/comments` |
-| 3 | CSRF | Node.js | `/change-email` (POST) |
-| 4 | SSRF | Python | `/fetch-url` (POST) |
-| 5 | SSTI | Python | `/welcome` |
-| 6 | OS Command Injection | Python | `/ping` (POST) |
-| 7 | Information Disclosure | Python | `/calculate` + HTTP headers |
+| 1 | SQL Injection | Node.js | `POST /login` |
+| 2 | Cross-Site Scripting (XSS) | Node.js | `GET/POST /comments` |
+| 3 | Cross-Site Request Forgery (CSRF) | Node.js | `POST /change-email` |
+| 4 | Server-Side Request Forgery (SSRF) | Python/Flask | `POST /fetch-url` |
+| 5 | Server-Side Template Injection (SSTI) | Python/Flask | `GET /welcome` |
+| 6 | OS Command Injection | Python/Flask | `POST /ping` |
+| 7 | Information Disclosure | Python/Flask | `GET /calculate` + HTTP headers |
 
 ---
 
-## Node.js Application (port 3000)
+# Part 1: Node.js Application (port 3000)
 
-### 1. SQL Injection
-**Location:** `/login` route (POST) in `vulnerable-app/index.js`
+## 1. SQL Injection
 
-**Vulnerable code:**
-User input is concatenated directly into the SQL query string instead of using parameterized queries.
+**File:** `vulnerable-app/index.js`
+**Endpoint:** `POST /login`
 
-**How to exploit:**
-1. Go to http://localhost:3000/login
-2. Username: `admin' --`
-3. Password: anything
-4. Result: Logs in as admin without knowing the real password
+### Description
+The login form checks a username and password against the database. Instead of treating user input as pure data, the application builds the SQL query by directly inserting the raw input into the query string.
 
-**Why it works:**
-The `--` sequence comments out the rest of the SQL query, removing the password check entirely.
+### Vulnerable Code
+```javascript
+const query = `SELECT * FROM users WHERE username = '${username}' AND password = '${password}'`;
+const user = db.prepare(query).get();
+```
+
+### Exploitation Steps
+1. Navigate to `http://localhost:3000/login`
+2. Enter Username: `admin' --`
+3. Enter any value for Password
+4. Click Login
+5. Result: logged in as `admin` without knowing the real password
+
+### Root Cause
+The `--` sequence is interpreted by SQL as the start of a comment, so everything after it (including the password check) is ignored by the database engine.
+
+### Q&A
+
+**Q: Why does adding `--` make the query succeed?**
+A: In SQL, `--` marks the rest of the line as a comment. The final query becomes `SELECT * FROM users WHERE username = 'admin'`, with no password condition at all.
+
+**Q: Could this be used for more than bypassing login?**
+A: Yes. Depending on the database and privileges, SQL Injection can be used to read entire tables, modify or delete data, or in some configurations even execute operating system commands.
+
+**Q: Is this a realistic scenario, or only a classroom example?**
+A: Extremely realistic. SQL Injection has consistently ranked among the OWASP Top 10 vulnerabilities for over a decade and has caused real-world breaches affecting millions of user records.
 
 ---
 
-### 2. XSS (Cross-Site Scripting)
-**Location:** `/comments` route (GET & POST) in `vulnerable-app/index.js`
+## 2. Cross-Site Scripting (XSS)
 
-**Vulnerable code:**
-User comment content is inserted directly into the HTML response without any sanitization or encoding.
+**File:** `vulnerable-app/index.js`
+**Endpoint:** `GET/POST /comments`
 
-**How to exploit:**
-1. Go to http://localhost:3000/comments
-2. In the comment box, enter: `<script>alert('XSS Attack!')</script>`
+### Description
+User-submitted comments are stored in the database and later displayed to every visitor. The application inserts the raw comment content into the HTML response without any encoding.
+
+### Vulnerable Code
+```javascript
+const commentsHtml = comments.map(c => `<p>${c.content}</p>`).join('');
+```
+
+### Exploitation Steps
+1. Navigate to `http://localhost:3000/comments`
+2. Enter the comment: `<script>alert('XSS Attack!')</script>`
 3. Click Post Comment
-4. Result: The script executes in the browser, showing an alert popup
+4. Result: a JavaScript alert box appears, confirming the script executed
 
-**Why it works:**
-The browser cannot distinguish between plain text and executable code when raw HTML is inserted. Since the comment is stored in the database, every visitor who views the page will also trigger the script (Stored XSS).
+### Root Cause
+Browsers cannot distinguish text intended for display from text intended to be executed as code. When raw HTML/JavaScript is embedded in the page, the browser parses and runs it.
 
----
+### Q&A
 
-### 3. CSRF (Cross-Site Request Forgery)
-**Location:** `/change-email` route (POST) in `vulnerable-app/index.js`
+**Q: Why is this called "Stored" XSS specifically?**
+A: Because the malicious script is saved in the database (not just reflected in a single response), meaning every visitor who loads the comments page afterward will also trigger the script.
 
-**Vulnerable code:**
-The email-change endpoint only checks for the presence of a login cookie, with no CSRF token verification. The cookie itself was configured with `sameSite: 'none'`, disabling the browser's built-in CSRF protection.
+**Q: What could an attacker actually achieve with this beyond a popup?**
+A: In a real attack, the script could steal session cookies, redirect users to phishing pages, or silently perform actions on the victim's behalf using their authenticated session.
 
-**How to exploit:**
-1. Log in normally at http://localhost:3000/login
-2. Without logging out, open `csrf_attack.html` in the same browser
-3. The hidden form auto-submits a POST request to `/change-email`
-4. Result: The victim's email is changed to `hacker@evil.com` without their knowledge or consent
-
-**Why it works:**
-Browsers automatically attach cookies to requests sent to a domain, regardless of which site initiated the request. Without a CSRF token tied to the user's session, the server cannot distinguish a legitimate request from a forged one.
+**Q: Does this only affect the specific browser of the attacker?**
+A: No — since the payload is stored server-side, it affects every user who views the page, regardless of which browser or device they use.
 
 ---
 
-## Python/Flask Application (port 5000)
+## 3. Cross-Site Request Forgery (CSRF)
 
-### 4. SSRF (Server-Side Request Forgery)
-**Location:** `/fetch-url` route (POST) in `vulnerable-app-python/app.py`
+**File:** `vulnerable-app/index.js`
+**Endpoint:** `POST /change-email`
 
-**Vulnerable code:**
-The server fetches any URL provided by the user with no validation of the destination, allowing it to reach internal resources.
+### Description
+The email-change feature only checks whether a login cookie is present, without verifying that the request actually originated from the application's own interface.
 
-**How to exploit:**
-1. Go to http://localhost:5000/fetch-url
+### Vulnerable Code
+```javascript
+res.cookie('loggedInUser', user.username, { sameSite: 'none', secure: true });
+// /change-email has no CSRF token check
+```
+
+### Exploitation Steps
+1. Log in normally at `http://localhost:3000/login`
+2. Without logging out, open `csrf_attack.html` (a page simulating an attacker's site) in the same browser
+3. The hidden form on that page automatically submits a POST request to `/change-email`
+4. Result: the victim's email is changed to `hacker@evil.com` without their knowledge or action
+
+### Root Cause
+Browsers automatically attach cookies to any request sent to a given domain, regardless of which website initiated that request. With `sameSite: 'none'`, this cross-site cookie transmission is explicitly allowed.
+
+### Q&A
+
+**Q: Why does the browser send the cookie even though the request came from another website?**
+A: By default (and explicitly here via `sameSite: 'none'`), cookies are attached to any request targeting their domain, independent of the page that triggered the request.
+
+**Q: Isn't logging in required to prevent this?**
+A: Being logged in is actually what enables the attack — the attacker relies on the victim already having an active, authenticated session.
+
+**Q: What real-world actions could be forged besides changing an email?**
+A: Any state-changing action exposed without CSRF protection — transferring funds, changing passwords, submitting orders, or deleting data — could potentially be forged this way.
+
+---
+
+# Part 2: Python/Flask Application (port 5000)
+
+## 4. Server-Side Request Forgery (SSRF)
+
+**File:** `vulnerable-app-python/app.py`
+**Endpoint:** `POST /fetch-url`
+
+### Description
+A "URL preview" feature allows the server to fetch and display the content of any URL supplied by the user, with no restriction on the destination.
+
+### Vulnerable Code
+```python
+url = request.form['url']
+response = requests.get(url, timeout=5)
+```
+
+### Exploitation Steps
+1. Navigate to `http://localhost:5000/fetch-url`
 2. Enter: `http://localhost:5000/`
 3. Click Fetch
-4. Result: The server fetches and returns content from its own internal address
+4. Result: the server returns content from its own internal address, proving it can be directed to reach resources not meant to be publicly accessible via this feature
 
-**Why it works:**
-The `requests.get(url)` call trusts the user-supplied URL completely, with no allowlist or check against internal/private addresses (e.g., localhost, 127.0.0.1, or cloud metadata endpoints like 169.254.169.254).
+### Root Cause
+The server trusts the user-supplied URL completely, using it directly in an outbound request without validating the destination host.
 
----
+### Q&A
 
-### 5. SSTI (Server-Side Template Injection)
-**Location:** `/welcome` route (GET) in `vulnerable-app-python/app.py`
+**Q: Why is it dangerous for a server to fetch its own internal pages?**
+A: In this demo it is low-risk, but in real cloud environments, servers often have access to internal-only endpoints (like cloud metadata services) that expose sensitive credentials — SSRF can be used to reach those.
 
-**Vulnerable code:**
-User input is inserted directly into the template string before Jinja2 processes it, instead of being passed as safe template data.
+**Q: Why not just block "localhost" specifically?**
+A: Blocking specific strings is fragile — attackers can use alternate representations (like `127.0.0.1`, `0.0.0.0`, or DNS rebinding techniques) to bypass a simple denylist. This is why the fix uses an allowlist instead.
 
-**How to exploit:**
-1. Go to http://localhost:5000/welcome?name={{7*7}}
-2. Result: The page displays "Welcome, 49!" instead of the literal text "{{7*7}}", proving the input was executed as Jinja2 code
-
-**Why it works:**
-`render_template_string(template)` processes the entire string as a Jinja2 template. Since user input was concatenated into that string before rendering, any Jinja2 syntax provided gets executed by the template engine.
-
-**Note:** In a real-world scenario, an attacker would first fingerprint the templating engine in use before crafting an engine-specific payload. Here, Jinja2 syntax was used directly since the application's stack is known to be Flask.
+**Q: Is SSRF only a problem for URL-preview features?**
+A: No — SSRF can occur in any feature that makes server-side requests based on user input, such as webhooks, PDF generators, or image-fetching tools.
 
 ---
 
-### 6. OS Command Injection
-**Location:** `/ping` route (POST) in `vulnerable-app-python/app.py`
+## 5. Server-Side Template Injection (SSTI)
 
-**Vulnerable code:**
-User input is concatenated directly into a shell command string, and executed with `shell=True`, allowing special shell characters to inject additional commands.
+**File:** `vulnerable-app-python/app.py`
+**Endpoint:** `GET /welcome`
 
-**How to exploit:**
-1. Go to http://localhost:5000/ping
+### Description
+A "welcome" page builds a Jinja2 template string by directly embedding user input, then renders that string as a template.
+
+### Vulnerable Code
+```python
+template = f'<h2>Welcome, {name}!</h2>'
+return render_template_string(template)
+```
+
+### Exploitation Steps
+1. Navigate to `http://localhost:5000/welcome?name={{7*7}}`
+2. Result: the page displays "Welcome, 49!" instead of the literal text "{{7*7}}", proving the input was executed as Jinja2 code rather than displayed as plain text
+
+### Root Cause
+`render_template_string()` parses its entire input as a template. Since user input became part of that string before parsing, any Jinja2 syntax within it is interpreted and executed.
+
+### Q&A
+
+**Q: How does this escalate beyond a simple math calculation?**
+A: Jinja2's expression syntax can access Python objects and, through known technique chains, reach functions capable of executing arbitrary code on the server — making SSTI potentially as severe as remote code execution.
+
+**Q: Why did you use Jinja2 syntax specifically to test this?**
+A: Because the application's technology stack (Flask) was already known to use Jinja2 by default. In a real penetration test, an attacker would first try multiple template syntaxes to fingerprint which engine is in use before crafting a targeted payload.
+
+**Q: Is SSTI the same as XSS?**
+A: No. XSS executes in the victim's browser (client-side), while SSTI executes on the server itself — making SSTI generally more severe.
+
+---
+
+## 6. OS Command Injection
+
+**File:** `vulnerable-app-python/app.py`
+**Endpoint:** `POST /ping`
+
+### Description
+A "server health check" tool builds a shell command string using user input and executes it via the system shell.
+
+### Vulnerable Code
+```python
+command = f'ping -n 1 {host}'
+result = subprocess.run(command, shell=True, capture_output=True, text=True)
+```
+
+### Exploitation Steps
+1. Navigate to `http://localhost:5000/ping`
 2. Enter: `google.com & dir`
 3. Click Ping
-4. Result: The output shows both the ping result AND a directory listing, proving a second, unintended command was executed
+4. Result: the output shows both the ping result and a directory listing, proving a second, unintended command was executed
 
-**Why it works:**
-`subprocess.run(command, shell=True)` passes the entire string to the system shell for interpretation. The shell treats `&` as a command separator, executing both commands sequentially.
+### Root Cause
+`shell=True` causes the operating system's shell to interpret the entire string, including special characters like `&`, which chains multiple commands together.
+
+### Q&A
+
+**Q: What makes OS Command Injection more dangerous than SQL Injection?**
+A: While SQL Injection is limited to database operations, OS Command Injection grants direct access to the underlying operating system — potentially allowing file manipulation, malware installation, or full server takeover.
+
+**Q: Why does `&` specifically cause a second command to run?**
+A: On Windows, `&` is a command separator recognized by the shell (`cmd.exe`), instructing it to run the command before `&` and then the command after it, regardless of the first command's success.
+
+**Q: Would this vulnerability exist without `shell=True`?**
+A: No — that flag is precisely what allows the input to be interpreted by the shell. Without it, arguments are passed literally to the target program, which is the basis of the fix.
 
 ---
 
-### 7. Information Disclosure
-**Location:** `/calculate` route in `vulnerable-app-python/app.py`, and default Flask server headers
+## 7. Information Disclosure
 
-**Vulnerable code (Example 1 - Debug error pages):**
-Flask is running with `debug=True`, and the `/calculate` route has no error handling around integer division.
+**File:** `vulnerable-app-python/app.py`
+**Location:** `GET /calculate` (debug error pages) and default Flask response headers
 
-**How to exploit (Example 1):**
-1. Go to http://localhost:5000/calculate?number=0
-2. Result: A full Flask debug page appears, showing the exact error type, the full file path, the exact line number, source code, and an interactive debugging console
+### Description
+This category is demonstrated through two related but distinct issues: verbose debug error pages, and default server headers revealing software versions.
 
-**Vulnerable code (Example 2 - HTTP header leakage):**
-Flask's default development server exposes detailed version information in the `Server` HTTP response header.
+### Vulnerable Code (Example 1 — Debug Error Pages)
+```python
+result = 100 / int(number)
+return f'Result: {result}'
+# app.run(port=5000, debug=True)
+```
 
-**How to exploit (Example 2):**
+### Exploitation Steps (Example 1)
+1. Navigate to `http://localhost:5000/calculate?number=0`
+2. Result: Flask's full debug page appears, showing the exact exception type, the complete file path on the server, the exact line number, a source code snippet, and an interactive debugging console
+
+### Exploitation Steps (Example 2 — HTTP Headers)
 1. Open any page with browser DevTools open on the Network tab
 2. Inspect the Response Headers of the request
-3. Result: The `Server` header reveals the exact Werkzeug and Python versions in use
+3. Result: the `Server` header reveals the exact Werkzeug and Python versions in use
 
-**Why it works:**
-Debug mode is intended for development only, but leaving it enabled exposes internal application details and even remote code execution capability via the interactive console. Default server headers let any visitor fingerprint the exact software stack.
+### Root Cause
+Debug mode is a development convenience that should never be enabled in a real deployment. Default server headers are also left unmodified, exposing exact software versions.
+
+### Q&A
+
+**Q: Why is the debug console more dangerous than just an error message?**
+A: Flask's debug mode includes an interactive Python console directly in the error page, which — if left enabled in production — could allow an attacker to execute arbitrary Python code on the server.
+
+**Q: Why would knowing the exact software version matter to an attacker?**
+A: Publicly known vulnerabilities (CVEs) are often tied to specific software versions. Knowing the precise version lets an attacker search for and apply a matching known exploit directly.
+
+**Q: Isn't this a "minor" vulnerability compared to the others?**
+A: On its own, it does not directly grant access — but it significantly assists an attacker in planning further attacks, which is why it is classified as its own vulnerability category rather than dismissed as harmless.
