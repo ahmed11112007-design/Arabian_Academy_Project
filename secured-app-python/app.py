@@ -9,17 +9,40 @@ import re
 
 app = Flask(__name__)
 
-ALLOWED_DOMAINS = ['example.com', 'www.example.com']
+ALLOWED_DOMAINS = ['example.com', 'www.example.com', 'google.com', 'www.google.com']
 
 @app.route('/')
 def home():
-    return 'Secured App - Python. Try /fetch-url'
+    return '''
+    <link rel="stylesheet" href="/static/style.css">
+    <h2>Secured App - Python</h2>
+    <div class="vuln-grid">
+      <a href="/fetch-url" class="vuln-card">
+        SSRF Fix
+        <span class="vuln-desc">Only allowlisted domains can be fetched</span>
+      </a>
+      <a href="/welcome?name=Guest" class="vuln-card">
+        SSTI Fix
+        <span class="vuln-desc">User input passed as safe template data</span>
+      </a>
+      <a href="/ping" class="vuln-card">
+        OS Command Injection Fix
+        <span class="vuln-desc">Input validated, no shell interpretation</span>
+      </a>
+      <a href="/calculate?number=5" class="vuln-card">
+        Information Disclosure Fix
+        <span class="vuln-desc">Errors handled, debug mode off</span>
+      </a>
+    </div>
+    '''
 
 @app.route('/fetch-url', methods=['GET', 'POST'])
 def fetch_url():
     if request.method == 'GET':
         return '''
+            <link rel="stylesheet" href="/static/style.css">
             <h2>URL Preview Tool</h2>
+            <p class="page-hint">Try: <code>http://example.com</code> (allowed) vs <code>http://localhost:5000/</code> (blocked)</p>
             <form method="POST">
                 <input type="text" name="url" placeholder="Enter a URL to preview">
                 <button type="submit">Fetch</button>
@@ -42,14 +65,16 @@ def fetch_url():
 def welcome():
     name = request.args.get('name', 'Guest')
     safe_name = escape(name)
-    template = '<h2>Welcome, {{ name }}!</h2>'
+    template = '<link rel="stylesheet" href="/static/style.css"><h2>Welcome, {{ name }}!</h2><p class="page-hint">Try: <code>?name={{ "{{7*7}}" }}</code> — it will show as plain text, not 49.</p>'
     return render_template_string(template, name=safe_name)
 
 @app.route('/ping', methods=['GET', 'POST'])
 def ping():
     if request.method == 'GET':
         return '''
+            <link rel="stylesheet" href="/static/style.css">
             <h2>Server Health Check</h2>
+            <p class="page-hint">Try: <code>google.com & dir</code> — the injection attempt will be rejected.</p>
             <form method="POST">
                 <input type="text" name="host" placeholder="Enter a hostname or IP">
                 <button type="submit">Ping</button>
@@ -70,7 +95,7 @@ def calculate():
 
     try:
         result = 100 / int(number)
-        return f'<h2>Simple Calculator</h2><p>Result: {result}</p>'
+        return f'<link rel="stylesheet" href="/static/style.css"><h2>Simple Calculator</h2><p class="page-hint">Try: <code>?number=0</code> — you\'ll get a clean error message, not a debug page.</p><p>Result: {result}</p>'
     except ZeroDivisionError:
         return '<h2>Simple Calculator</h2><p>Error: Cannot divide by zero.</p>'
     except ValueError:

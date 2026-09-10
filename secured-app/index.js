@@ -11,9 +11,11 @@ const PORT = 4000;
 
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
+app.use(express.static('public'));
 
 app.get('/login', (req, res) => {
     res.send(`
+    <link rel="stylesheet" href="/style.css">
     <h2>Login</h2>
     <form method="POST" action="/login">
       <input type="text" name="username" placeholder="Username"><br>
@@ -25,8 +27,26 @@ app.get('/login', (req, res) => {
 
 
 app.get('/', (req, res) => {
-    res.send('Secured App - Node.js. Try /login');
+    res.send(`
+    <link rel="stylesheet" href="/style.css">
+    <h2>Secured App - Node.js</h2>
+    <div class="vuln-grid">
+      <a href="/login" class="vuln-card">
+        SQL Injection Fix
+        <span class="vuln-desc">Login using parameterized queries</span>
+      </a>
+      <a href="/comments" class="vuln-card">
+        XSS Fix
+        <span class="vuln-desc">Comments safely escaped before display</span>
+      </a>
+      <a href="/account" class="vuln-card">
+        CSRF Fix
+        <span class="vuln-desc">Protected with CSRF token + SameSite</span>
+      </a>
+    </div>
+  `);
 });
+
 app.post('/login', (req, res) => {
     const { username, password } = req.body;
     const user = db.prepare('SELECT * FROM users WHERE username = ? AND password = ?').get(username, password);
@@ -49,6 +69,7 @@ app.get('/account', (req, res) => {
     const csrfToken = tokens.create(csrfSecret);
 
     res.send(`
+    <link rel="stylesheet" href="/style.css">
     <h2>Account Settings</h2>
     <p>Current email: ${user.email}</p>
     <form method="POST" action="/change-email">
@@ -94,6 +115,7 @@ app.get('/comments', (req, res) => {
     const commentsHtml = comments.map(c => `<p>${escapeHtml(c.content)}</p>`).join('');
 
     res.send(`
+    <link rel="stylesheet" href="/style.css">
     <h2>Comments</h2>
     <form method="POST" action="/comments">
       <textarea name="content" placeholder="Write a comment..."></textarea><br>
